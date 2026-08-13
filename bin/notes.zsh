@@ -5,6 +5,13 @@ _NOTES_DIR="$HOME/sound-notes"
 _NOTES_PID_FILE="$HOME/.sound-notes.pid"
 
 note-start() {
+  # 대화형 zsh(job control 켜짐)에서는 `&`로 백그라운드 보낸 작업이 별도
+  # 프로세스 그룹으로 분리되는데, 이 상태의 ffmpeg가 avfoundation으로
+  # BlackHole을 열 때 조용히 멈춰버리는 경우가 있었다(2026-08-13 실제 발생 -
+  # 같은 스크립트가 job control 없는 비대화형 셸에서는 매번 정상 동작했음).
+  # 이 함수 안에서만 job control을 꺼서 그 문제를 피한다.
+  setopt LOCAL_OPTIONS NO_MONITOR
+
   local name="$1"
   if [[ -z "$name" ]]; then
     echo "사용법: note-start <제목>"
@@ -51,9 +58,10 @@ note-start() {
   if [[ ! -f "$wav_path" ]]; then
     kill -9 "$pid" 2>/dev/null
     echo "오류: ffmpeg는 떠 있지만 녹음 파일이 만들어지지 않았습니다 — 오디오 장치를"
-    echo "열지 못하고 멈춰있는 상태로 보입니다. 마이크 권한을 확인해주세요:"
-    echo "  시스템 설정 → 개인정보 보호 및 보안 → 마이크 → Warp(또는 사용 중인 터미널) 허용"
-    echo "  (이미 켜져 있다면 껐다 다시 켜보세요 - 권한 상태가 꼬였을 수 있습니다)"
+    echo "열지 못하고 멈춰있는 상태로 보입니다. 로그(보통 비어있음): $log_path"
+    cat "$log_path"
+    echo "확인할 것: 1) 마이크 권한(시스템 설정 → 개인정보 보호 및 보안 → 마이크)"
+    echo "          2) 한 번 더 note-start 재시도 (드물게 일시적일 수 있음)"
     return 1
   fi
 
