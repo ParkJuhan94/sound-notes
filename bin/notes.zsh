@@ -37,11 +37,23 @@ note-start() {
   local pid=$!
   disown
 
-  # ffmpeg가 avfoundation 장치를 여는 데 약간 시간이 걸림 — 조기 실패를 바로 감지
-  sleep 1
+  # ffmpeg가 avfoundation 장치를 여는 데 약간 시간이 걸림 — 조기 실패를 바로 감지.
+  # 프로세스가 살아있는 것만으로는 부족하다 — 마이크 권한(TCC)이 이 실행에 대해
+  # 조용히 거부되면 ffmpeg가 죽지도 않고 파일도 안 만든 채 그대로 멈춰버릴 수 있다
+  # (2026-08-13 실제 발생 - 16분 넘게 "녹음 중"으로 표시됐지만 WAV가 아예 생성 안 됨).
+  # 그래서 WAV 파일이 실제로 생겼는지까지 확인한다.
+  sleep 2
   if ! kill -0 "$pid" 2>/dev/null; then
     echo "오류: 녹음 시작에 실패했습니다. 로그 확인: $log_path"
     cat "$log_path"
+    return 1
+  fi
+  if [[ ! -f "$wav_path" ]]; then
+    kill -9 "$pid" 2>/dev/null
+    echo "오류: ffmpeg는 떠 있지만 녹음 파일이 만들어지지 않았습니다 — 오디오 장치를"
+    echo "열지 못하고 멈춰있는 상태로 보입니다. 마이크 권한을 확인해주세요:"
+    echo "  시스템 설정 → 개인정보 보호 및 보안 → 마이크 → Warp(또는 사용 중인 터미널) 허용"
+    echo "  (이미 켜져 있다면 껐다 다시 켜보세요 - 권한 상태가 꼬였을 수 있습니다)"
     return 1
   fi
 
@@ -89,9 +101,10 @@ note-status() {
     echo "현재 녹음 중인 항목이 없습니다."
     return 0
   fi
-  local line pid name start_ts now elapsed
+  local line pid wav_path name start_ts now elapsed
   line="$(cat "$_NOTES_PID_FILE")"
   pid="$(cut -d'|' -f1 <<< "$line")"
+  wav_path="$(cut -d'|' -f2 <<< "$line")"
   name="$(cut -d'|' -f3 <<< "$line")"
   start_ts="$(cut -d'|' -f4 <<< "$line")"
   if ! kill -0 "$pid" 2>/dev/null; then
@@ -100,5 +113,24 @@ note-status() {
   fi
   now=$(date +%s)
   elapsed=$(( now - start_ts ))
+
+  # 프로세스 생존만으로는 실제로 녹음되고 있는지 알 수 없다 - 마이크 권한이
+  # 조용히 막히면 ffmpeg가 죽지 않은 채 파일만 안 늘어나는 상태가 될 수 있다.
+  if [[ ! -f "$wav_path" ]]; then
+    printf "⚠️  프로세스는 살아있지만 녹음 파일이 아직 없습니다(%d초 경과) — 멈춰있을 수\n" "$elapsed"
+    echo "    있습니다. 마이크 권한(시스템 설정 → 개인정보 보호 및 보안 → 마이크)을 확인하세요."
+    return 1
+  fi
+  local mtime staleness
+  mtime="$(stat -f %m "$wav_path" 2>/dev/null)"
+  if [[ -n "$mtime" ]]; then
+    staleness=$(( now - mtime ))
+    if (( staleness > 15 )); then
+      printf "⚠️  프로세스는 살아있지만 파일이 %d초째 갱신되지 않고 있습니다 — 녹음이 멈춘\n" "$staleness"
+      echo "    것으로 보입니다. 마이크 권한을 확인하고 note-stop 후 다시 시작해보세요."
+      return 1
+    fi
+  fi
+
   printf "🔴 녹음 중: %s (%d분 %d초 경과)\n" "$name" $((elapsed / 60)) $((elapsed % 60))
 }
