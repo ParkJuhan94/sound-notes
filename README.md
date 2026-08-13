@@ -1,5 +1,7 @@
 # sound-notes — 시스템 오디오 → 한국어 전사 노트
 
+**macOS 전용** (BlackHole·Audio MIDI 설정·avfoundation 등 macOS 전용 기술에 의존 — Windows/Linux에서는 동작하지 않습니다)
+
 > ⚠️ **개인 학습·기록 용도로만 사용하세요.** 녹음 대상 콘텐츠(유료 강의, 영상, 방송 등)에는
 > 대부분 재배포·공유를 금지하는 이용약관이 걸려 있습니다. 이 파이프라인으로 만든 녹음 파일
 > (`.wav`)과 전사 결과물(`.md`)은 **본인이 시청할 권한이 있는 콘텐츠**를 복습하기 위한 개인
@@ -14,6 +16,25 @@
 
 ---
 
+## ⚠️ 주의사항 (먼저 읽어주세요)
+
+- **macOS 전용입니다.** BlackHole(가상 오디오 드라이버), 오디오 MIDI 설정(다중 출력 기기),
+  ffmpeg의 `avfoundation` 입력 모두 macOS 고유 기능이라 Windows/Linux로는 그대로 옮길 수
+  없습니다. Apple Silicon(M1 이상) + Metal 가속을 기준으로 빌드·테스트했습니다. Intel Mac은
+  Metal 대신 CPU 백엔드로 동작은 하겠지만 훨씬 느릴 수 있고 별도로 검증하지 않았습니다.
+- **배속 재생 시 `.md` 타임스탬프는 "재생된(빠른) 오디오" 기준입니다.** 1.25x, 1.5x 등으로
+  들으면서 녹음하면, 예를 들어 `## 10:00`은 원본 영상의 10분 지점이 아니라 **배속으로 재생된
+  오디오의 10분 지점**입니다. 원본 시간으로 되돌리려면 타임스탬프에 배속을 곱하세요
+  (1.5배속이면 `10:00 × 1.5 = 15:00`).
+- **듣지 않고 무음으로 녹음할 수 있습니다.** 오디오 MIDI 설정에서 **물리 출력 장치(스피커)
+  행의 음량 슬라이더만 0으로** 내리세요 — `BlackHole 2ch` 행은 완전히 독립된 슬라이더라
+  영향을 받지 않고 그대로 녹음됩니다. 단, **브라우저 탭 음소거나 영상 플레이어 자체의 볼륨/
+  음소거 버튼은 쓰면 안 됩니다** — 소리가 OS로 나가기 *전에* 원본 신호 자체를 줄이는 것이라
+  BlackHole로 가는 녹음도 같이 무음이 됩니다. (자세한 단계는 아래 "2. 오디오 MIDI 설정"
+  참고)
+
+---
+
 ## 디렉터리 구조
 
 ```
@@ -23,7 +44,7 @@
 │   ├── record.sh       # BlackHole 캡처 → WAV (내부용, 직접 실행 X)
 │   ├── transcribe.sh   # WAV → md (내부용, 직접 실행 X)
 │   └── notes.zsh       # note-start / note-stop / note-status 함수
-├── whisper.cpp/          # 클론 + Metal 빌드 결과물 + 모델
+├── whisper.cpp/          # 클론 + Metal 빌드 결과물 + 모델 (git 저장소엔 미포함, 아래 4번 참고)
 └── transcripts/          # Obsidian vault로 열어서 쓰기 좋음
     └── {제목}/
         ├── {제목}_{YYYYMMDD}_{HHMM}.wav   # 원본 녹음 (16kHz mono PCM)
@@ -90,8 +111,14 @@ macOS는 BlackHole 캡처도 "마이크 입력"으로 취급합니다. 첫 녹�
 
 ### 4. whisper.cpp 빌드 + 모델
 
-이미 이 저장소에 클론·빌드되어 있습니다(`~/sound-notes/whisper.cpp`). 처음부터 다시
-하려면:
+whisper.cpp는 이 저장소에 포함되어 있지 않습니다 (모델 파일이 547MB로 GitHub 업로드 용량
+제한을 넘고, 빌드 결과물도 이 맥 전용 바이너리라 그대로 옮겨 쓸 수 없습니다). 아래처럼
+직접 clone + build 하세요:
+
+- **저장소**: https://github.com/ggml-org/whisper.cpp
+- **이 프로젝트가 빌드/검증한 버전**: `v1.9.2-17-g592feef0` (커밋 `592feef0`, 2026-08-07)
+  — 최신 `master`를 그대로 써도 대체로 호환되지만, 문제가 생기면 이 커밋으로 체크아웃해보세요
+  (`git checkout 592feef0`).
 
 ```bash
 git clone https://github.com/ggml-org/whisper.cpp.git ~/sound-notes/whisper.cpp
