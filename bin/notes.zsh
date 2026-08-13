@@ -23,6 +23,19 @@ note-start() {
     return 1
   fi
 
+  # PID 파일 없이 avfoundation을 물고 있는 ffmpeg가 남아있으면(예: 이전
+  # note-stop이 강제 종료 전에 실행되던 옛 버전이었거나, PID 파일을 수동으로
+  # 지운 경우) 새 녹음이 장치를 못 열고 조용히 멈추는 원인이 된다. 미리 잡아낸다.
+  local stray_pids
+  stray_pids="$(pgrep -f 'ffmpeg .*-f avfoundation')"
+  if [[ -n "$stray_pids" ]]; then
+    echo "오류: BlackHole/avfoundation을 이미 물고 있는 ffmpeg 프로세스가 있습니다"
+    echo "(PID: $(tr '\n' ' ' <<< "$stray_pids")). 이 상태로는 새 녹음이 장치를"
+    echo "못 열고 멈춥니다. 아래로 정리 후 다시 시도하세요:"
+    echo "  kill -9 $(tr '\n' ' ' <<< "$stray_pids")"
+    return 1
+  fi
+
   if ! ffmpeg -f avfoundation -list_devices true -i "" 2>&1 | grep -q "BlackHole 2ch"; then
     echo "오류: BlackHole 2ch 장치를 찾을 수 없습니다. 아래 오디오 장치 목록을 확인하세요:"
     ffmpeg -f avfoundation -list_devices true -i "" 2>&1 | awk '/AVFoundation audio devices:/{flag=1} flag'
@@ -90,6 +103,14 @@ note-stop() {
       sleep 1
       waited=$((waited + 1))
     done
+    # SIGINT 15초 안에 안 죽으면 그냥 넘어가지 않고 강제 종료한다 - 안 그러면
+    # 좀비 ffmpeg가 BlackHole을 계속 물고 있어서, 다음 note-start가 장치를
+    # 못 열고 조용히 멈추는 원인이 된다(2026-08-13 실제 발생 - 이전 세션의
+    # 좀비 프로세스가 원인으로 의심됐던 "장치 열기 실패" 재현의 배경이었음)
+    if kill -0 "$pid" 2>/dev/null; then
+      echo "⚠️  15초 내 정상 종료 안 됨 - 강제 종료합니다 (WAV가 일부 손상될 수 있음)"
+      kill -9 "$pid" 2>/dev/null
+    fi
   fi
 
   rm -f "$_NOTES_PID_FILE"
