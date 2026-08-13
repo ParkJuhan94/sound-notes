@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# whisper.cpp(Metal 가속)로 녹음된 강의 WAV를 한국어로 전사해, 문단별 타임스탬프가 붙은
+# whisper.cpp(Metal 가속)로 녹음된 WAV를 한국어로 전사해, 문단별 타임스탬프가 붙은
 # 단일 마크다운 노트(.md)로 생성한다. whisper.cpp의 SRT 출력을 중간 산출물로만 사용해
 # 파싱한 뒤 삭제하므로 최종적으로 .md 파일만 남는다 (LLM에 그대로 넣기 좋은 형태).
-# 개인 학습 노트 용도로만 사용 — 전사 결과물의 재배포·공유는 금지 (인프런 이용약관).
+# 개인 학습·기록 용도로만 사용 — 전사 결과물의 재배포·공유는 금지.
 #
-# 사용법: lecture-transcribe.sh <입력.wav 경로>
+# 사용법: transcribe.sh <입력.wav 경로>
 # 모델/바이너리 경로는 WHISPER_DIR, WHISPER_MODEL 환경변수로 오버라이드 가능.
 set -euo pipefail
 
-LECTURE_DIR="$HOME/lecture-transcribe"
-WHISPER_DIR="${WHISPER_DIR:-$LECTURE_DIR/whisper.cpp}"
+NOTES_DIR="$HOME/sound-notes"
+WHISPER_DIR="${WHISPER_DIR:-$NOTES_DIR/whisper.cpp}"
 WHISPER_CLI="$WHISPER_DIR/build/bin/whisper-cli"
 WHISPER_MODEL="${WHISPER_MODEL:-$WHISPER_DIR/models/ggml-large-v3-turbo-q5_0.bin}"
 
-WAV_PATH="${1:?사용법: lecture-transcribe.sh <입력.wav 경로>}"
+WAV_PATH="${1:?사용법: transcribe.sh <입력.wav 경로>}"
 
 if [[ ! -f "$WAV_PATH" ]]; then
   echo "오류: WAV 파일을 찾을 수 없습니다: $WAV_PATH" >&2
@@ -31,7 +31,7 @@ fi
 OUT_PREFIX="${WAV_PATH%.wav}"
 SRT_PATH="${OUT_PREFIX}.srt"
 MD_PATH="${OUT_PREFIX}.md"
-LECTURE_NAME="$(basename "$(dirname "$WAV_PATH")")"
+NOTE_TITLE="$(basename "$(dirname "$WAV_PATH")")"
 
 echo "전사 시작: $(basename "$WAV_PATH")"
 START_TS=$(date +%s)
@@ -45,7 +45,7 @@ START_TS=$(date +%s)
   -t 4 -pp
 
 {
-  echo "# ${LECTURE_NAME}"
+  echo "# ${NOTE_TITLE}"
   echo ""
   awk '
     BEGIN { RS=""; FS="\n" }

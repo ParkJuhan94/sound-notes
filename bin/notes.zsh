@@ -1,18 +1,18 @@
-# 인프런 강의 자동 전사 파이프라인 — lecture-start / lecture-stop / lecture-status
-# 개인 학습 노트 용도로만 사용. 인프런 등 강의 콘텐츠의 재배포·공유는 금지.
+# 시스템 오디오 녹음 → 한국어 전사 파이프라인 — note-start / note-stop / note-status
+# 개인 학습·기록 용도로만 사용. 녹음 대상 콘텐츠(강의, 영상 등)의 이용약관을 따를 것.
 
-_LECTURE_DIR="$HOME/lecture-transcribe"
-_LECTURE_PID_FILE="$HOME/.lecture-transcribe.pid"
+_NOTES_DIR="$HOME/sound-notes"
+_NOTES_PID_FILE="$HOME/.sound-notes.pid"
 
-lecture-start() {
+note-start() {
   local name="$1"
   if [[ -z "$name" ]]; then
-    echo "사용법: lecture-start <강의명>"
+    echo "사용법: note-start <제목>"
     return 1
   fi
-  if [[ -f "$_LECTURE_PID_FILE" ]]; then
-    echo "이미 녹음 중입니다: $(cut -d'|' -f3 "$_LECTURE_PID_FILE")"
-    echo "먼저 lecture-stop 을 실행하세요."
+  if [[ -f "$_NOTES_PID_FILE" ]]; then
+    echo "이미 녹음 중입니다: $(cut -d'|' -f3 "$_NOTES_PID_FILE")"
+    echo "먼저 note-stop 을 실행하세요."
     return 1
   fi
 
@@ -28,12 +28,12 @@ lecture-start() {
   safe_name="${safe_name//\//_}"
   local ts
   ts="$(date +%Y%m%d_%H%M)"
-  local out_dir="$_LECTURE_DIR/transcripts/${safe_name}"
+  local out_dir="$_NOTES_DIR/transcripts/${safe_name}"
   mkdir -p "$out_dir"
   local wav_path="${out_dir}/${safe_name}_${ts}.wav"
   local log_path="${out_dir}/.record_${ts}.log"
 
-  nohup "$_LECTURE_DIR/bin/lecture-record.sh" "$wav_path" > "$log_path" 2>&1 &
+  nohup "$_NOTES_DIR/bin/record.sh" "$wav_path" > "$log_path" 2>&1 &
   local pid=$!
   disown
 
@@ -45,20 +45,20 @@ lecture-start() {
     return 1
   fi
 
-  echo "$pid|$wav_path|$safe_name|$(date +%s)" > "$_LECTURE_PID_FILE"
+  echo "$pid|$wav_path|$safe_name|$(date +%s)" > "$_NOTES_PID_FILE"
   echo "🎙  녹음 시작: $safe_name"
   echo "    저장 위치: $wav_path"
-  echo "    중지: lecture-stop"
+  echo "    중지: note-stop"
 }
 
-lecture-stop() {
-  if [[ ! -f "$_LECTURE_PID_FILE" ]]; then
+note-stop() {
+  if [[ ! -f "$_NOTES_PID_FILE" ]]; then
     echo "현재 진행 중인 녹음이 없습니다."
     return 1
   fi
 
   local line pid wav_path name
-  line="$(cat "$_LECTURE_PID_FILE")"
+  line="$(cat "$_NOTES_PID_FILE")"
   pid="$(cut -d'|' -f1 <<< "$line")"
   wav_path="$(cut -d'|' -f2 <<< "$line")"
   name="$(cut -d'|' -f3 <<< "$line")"
@@ -72,7 +72,7 @@ lecture-stop() {
     done
   fi
 
-  rm -f "$_LECTURE_PID_FILE"
+  rm -f "$_NOTES_PID_FILE"
 
   if [[ ! -s "$wav_path" ]]; then
     echo "오류: 녹음 파일이 비어있거나 없습니다: $wav_path"
@@ -81,21 +81,21 @@ lecture-stop() {
 
   echo "⏹  녹음 종료: $name"
   echo "    전사를 시작합니다 (모델 로딩 포함 다소 시간이 걸릴 수 있습니다)..."
-  "$_LECTURE_DIR/bin/lecture-transcribe.sh" "$wav_path"
+  "$_NOTES_DIR/bin/transcribe.sh" "$wav_path"
 }
 
-lecture-status() {
-  if [[ ! -f "$_LECTURE_PID_FILE" ]]; then
-    echo "현재 녹음 중인 강의가 없습니다."
+note-status() {
+  if [[ ! -f "$_NOTES_PID_FILE" ]]; then
+    echo "현재 녹음 중인 항목이 없습니다."
     return 0
   fi
   local line pid name start_ts now elapsed
-  line="$(cat "$_LECTURE_PID_FILE")"
+  line="$(cat "$_NOTES_PID_FILE")"
   pid="$(cut -d'|' -f1 <<< "$line")"
   name="$(cut -d'|' -f3 <<< "$line")"
   start_ts="$(cut -d'|' -f4 <<< "$line")"
   if ! kill -0 "$pid" 2>/dev/null; then
-    echo "PID 파일은 있지만 프로세스가 죽어있습니다. lecture-stop 으로 정리해주세요."
+    echo "PID 파일은 있지만 프로세스가 죽어있습니다. note-stop 으로 정리해주세요."
     return 1
   fi
   now=$(date +%s)

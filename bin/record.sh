@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# 인프런 등 유료 강의의 시스템 오디오(BlackHole 2ch)를 캡처하는 녹음 스크립트.
-# 개인 학습 노트 용도로만 사용 — 녹음/전사 결과물의 재배포·공유는 금지 (인프런 이용약관).
+# 시스템 오디오(BlackHole 2ch)를 캡처하는 녹음 스크립트.
+# 개인 학습·기록 용도로만 사용 — 녹음 대상 콘텐츠(강의, 영상 등)의 이용약관을 따를 것.
 #
-# 사용법: lecture-record.sh <출력.wav 경로>
-# 보통 직접 실행하지 않고 lecture.zsh 의 lecture-start 함수가 백그라운드로 호출한다.
+# 사용법: record.sh <출력.wav 경로>
+# 보통 직접 실행하지 않고 notes.zsh 의 note-start 함수가 백그라운드로 호출한다.
 set -euo pipefail
 
-WAV_PATH="${1:?사용법: lecture-record.sh <출력.wav 경로>}"
+WAV_PATH="${1:?사용법: record.sh <출력.wav 경로>}"
 mkdir -p "$(dirname "$WAV_PATH")"
 
 DEVICE_LIST="$(ffmpeg -f avfoundation -list_devices true -i "" 2>&1 || true)"

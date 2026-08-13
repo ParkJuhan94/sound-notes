@@ -1,12 +1,12 @@
 # 외부 클론 (README 안내에 따라 각자 다시 clone+build)
 whisper.cpp/
 
-# 인프런 강의 녹음/전사 결과물 - 재배포 금지 대상이라 저장소에 포함하지 않음
+# 녹음/전사 결과물 - 재배포 금지 대상이라 저장소에 포함하지 않음
 transcripts/
 
 # 런타임 상태/로그
 *.log
-.lecture-transcribe.pid
+.sound-notes.pid
 
 .DS_Store
 

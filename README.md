@@ -1,31 +1,33 @@
-# 인프런 강의 자동 전사 파이프라인
+# sound-notes — 시스템 오디오 → 한국어 전사 노트
 
-> ⚠️ **개인 학습 노트 용도로만 사용하세요.** 인프런 이용약관상 강의 콘텐츠의 재배포·공유는
-> 금지되어 있습니다. 이 파이프라인으로 만든 녹음 파일(`.wav`)과 전사 결과물(`.md`)은
-> 본인이 결제한 강의를 복습하기 위한 개인 학습 노트로만 사용하고, 외부에 공유·배포하지 마세요.
+> ⚠️ **개인 학습·기록 용도로만 사용하세요.** 녹음 대상 콘텐츠(유료 강의, 영상, 방송 등)에는
+> 대부분 재배포·공유를 금지하는 이용약관이 걸려 있습니다. 이 파이프라인으로 만든 녹음 파일
+> (`.wav`)과 전사 결과물(`.md`)은 **본인이 시청할 권한이 있는 콘텐츠**를 복습하기 위한 개인
+> 노트로만 사용하고, 외부에 공유·배포하지 마세요.
 
-시스템 오디오(스피커로 나가는 인프런 강의 소리)를 BlackHole 가상 오디오 장치로 캡처해서,
-로컬 Whisper 모델(Metal GPU 가속)로 한국어 전사 텍스트를 생성합니다. 전사 결과는 문단별
-타임스탬프(`## MM:SS`)가 붙은 **단일 마크다운(.md) 노트**로 저장되어 Obsidian에서 바로
-읽히고, 그대로 LLM에 붙여넣어 요약을 요청하기도 좋습니다. 요약 자체는 이 파이프라인의
-범위 밖이며 이후 직접 또는 별도 LLM 호출로 처리하면 됩니다.
+시스템 오디오(스피커로 나가는 소리)를 BlackHole 가상 오디오 장치로 캡처해서, 로컬 Whisper
+모델(Metal GPU 가속)로 한국어 전사 텍스트를 생성합니다. **인프런 강의뿐 아니라 유튜브,
+화상회의 녹화, 팟캐스트 등 macOS 스피커로 재생되는 모든 오디오/영상**에 범용으로 쓸 수
+있습니다. 전사 결과는 문단별 타임스탬프(`## MM:SS`)가 붙은 **단일 마크다운(.md) 노트**로
+저장되어 Obsidian에서 바로 읽히고, 그대로 LLM에 붙여넣어 요약을 요청하기도 좋습니다. 요약
+자체는 이 파이프라인의 범위 밖이며 이후 직접 또는 별도 LLM 호출로 처리하면 됩니다.
 
 ---
 
 ## 디렉터리 구조
 
 ```
-~/lecture-transcribe/
+~/sound-notes/
 ├── README.md
 ├── bin/
-│   ├── lecture-record.sh       # BlackHole 캡처 → WAV (내부용, 직접 실행 X)
-│   ├── lecture-transcribe.sh   # WAV → md (내부용, 직접 실행 X)
-│   └── lecture.zsh             # lecture-start / lecture-stop / lecture-status 함수
-├── whisper.cpp/                 # 클론 + Metal 빌드 결과물 + 모델
-└── transcripts/                 # Obsidian vault로 열어서 쓰기 좋음
-    └── {강의명}/
-        ├── {강의명}_{YYYYMMDD}_{HHMM}.wav   # 원본 녹음 (16kHz mono PCM)
-        └── {강의명}_{YYYYMMDD}_{HHMM}.md    # 전사 노트 (문단별 타임스탬프 포함)
+│   ├── record.sh       # BlackHole 캡처 → WAV (내부용, 직접 실행 X)
+│   ├── transcribe.sh   # WAV → md (내부용, 직접 실행 X)
+│   └── notes.zsh       # note-start / note-stop / note-status 함수
+├── whisper.cpp/          # 클론 + Metal 빌드 결과물 + 모델
+└── transcripts/          # Obsidian vault로 열어서 쓰기 좋음
+    └── {제목}/
+        ├── {제목}_{YYYYMMDD}_{HHMM}.wav   # 원본 녹음 (16kHz mono PCM)
+        └── {제목}_{YYYYMMDD}_{HHMM}.md    # 전사 노트 (문단별 타임스탬프 포함)
 ```
 
 whisper.cpp의 SRT 출력은 타임스탬프를 뽑아내는 **중간 산출물로만** 쓰이고, `.md`로 변환된
@@ -56,7 +58,7 @@ brew install --cask blackhole-2ch
    `MacBook Air 스피커` 등 상황에 맞는 것)와 **`BlackHole 2ch`**를 함께 체크
 4. **기본 기기(마스터)**를 방금 체크한 물리 출력 장치로 지정
 5. **`BlackHole 2ch` 행에만** "드리프트 보정" 체크 (물리 출력 장치 행에는 체크하지 않음)
-6. 생성된 기기를 우클릭 → 이름을 `Lecture Output`처럼 장소에 안 묶인 이름으로 변경(추천)
+6. 생성된 기기를 우클릭 → 이름을 `Recording Output`처럼 장소에 안 묶인 이름으로 변경(추천)
 7. **시스템 설정 → 사운드 → 출력**에서 이 다중 출력 기기를 선택
 
 **노트북을 카페 ↔ 집 등 다른 곳에서 쓸 때**: 다중 출력 기기를 새로 만들 필요 없이, 기존
@@ -65,14 +67,19 @@ brew install --cask blackhole-2ch
 `DELL U2719D`를 체크 + 기본 기기(마스터)도 그에 맞게 변경. `BlackHole 2ch`는 항상 체크된
 채로 둡니다.
 
-**알아두면 좋은 점 3가지**
-- 다중 출력 기기 사용 중에는 **키보드 볼륨 키가 안 먹습니다** — 볼륨은 재생 중인 앱(브라우저 등)
-  내부 슬라이더로 조절하세요. 강의 들을 때만 이 출력으로 바꾸고 평소엔 원래 출력으로 되돌리는
-  걸 추천합니다.
+**알아두면 좋은 점**
+- 다중 출력 기기 사용 중에는 **키보드 볼륨 키가 안 먹습니다** — 대신 오디오 MIDI 설정 화면의
+  각 장치 행에 있는 **개별 음량 슬라이더**로 조절합니다. 녹음할 때만 이 출력으로 바꾸고
+  평소엔 원래 출력으로 되돌리는 걸 추천합니다.
 - `BlackHole 2ch`만 단독으로 출력 장치로 잡으면 **소리가 전혀 안 들립니다.** 반드시 물리
   장치와 함께 "다중 출력"으로 써야 합니다.
-- 시스템 알림음, 타이핑 소리 등 **다른 앱 소리도 같이 녹음**됩니다. 강의 들을 때는 다른 알림을
+- 시스템 알림음, 타이핑 소리 등 **다른 앱 소리도 같이 녹음**됩니다. 녹음할 때는 다른 알림을
   꺼두는 게 좋습니다.
+- **듣지 않고 녹음만 하고 싶다면**: 오디오 MIDI 설정에서 **물리 출력 장치 행의 음량
+  슬라이더만 0으로** 내리세요. `BlackHole 2ch` 행은 완전히 독립된 슬라이더라 영향을 받지
+  않고 그대로 녹음됩니다. 단, **브라우저 탭 음소거나 영상 플레이어 자체의 볼륨/음소거
+  버튼은 쓰면 안 됩니다** — 그건 소리가 OS로 나가기 전에 원본 신호 자체를 줄이는 것이라
+  BlackHole로 가는 녹음도 같이 무음이 됩니다.
 
 ### 3. 마이크 권한 확인
 
@@ -83,12 +90,12 @@ macOS는 BlackHole 캡처도 "마이크 입력"으로 취급합니다. 첫 녹�
 
 ### 4. whisper.cpp 빌드 + 모델
 
-이미 이 저장소에 클론·빌드되어 있습니다(`~/lecture-transcribe/whisper.cpp`). 처음부터 다시
+이미 이 저장소에 클론·빌드되어 있습니다(`~/sound-notes/whisper.cpp`). 처음부터 다시
 하려면:
 
 ```bash
-git clone https://github.com/ggml-org/whisper.cpp.git ~/lecture-transcribe/whisper.cpp
-cd ~/lecture-transcribe/whisper.cpp
+git clone https://github.com/ggml-org/whisper.cpp.git ~/sound-notes/whisper.cpp
+cd ~/sound-notes/whisper.cpp
 cmake -B build -DGGML_METAL=ON
 cmake --build build --config Release -j$(sysctl -n hw.logicalcpu)
 sh ./models/download-ggml-model.sh large-v3-turbo-q5_0    # 574MB 다운로드
@@ -100,21 +107,29 @@ sh ./models/download-ggml-model.sh large-v3-turbo-q5_0    # 574MB 다운로드
 
 ```bash
 sh ./models/download-ggml-model.sh large-v3-turbo
-WHISPER_MODEL=~/lecture-transcribe/whisper.cpp/models/ggml-large-v3-turbo.bin lecture-stop
+WHISPER_MODEL=~/sound-notes/whisper.cpp/models/ggml-large-v3-turbo.bin note-stop
 ```
 
 (모델 경로는 `WHISPER_MODEL` 환경변수로, whisper.cpp 위치는 `WHISPER_DIR`로 오버라이드 가능)
+
+**⚠️ `~/sound-notes` 폴더 자체를 나중에 다른 경로로 옮기면**, `whisper-cli` 바이너리가
+빌드 시점의 절대 경로를 라이브러리 링크 경로로 갖고 있어서 `dyld: Library not loaded` 오류가
+납니다. 폴더를 옮겼다면 `whisper.cpp`만 새 경로에서 다시 빌드하세요(모델 재다운로드는 불필요):
+```bash
+cd ~/sound-notes/whisper.cpp && rm -rf build
+cmake -B build -DGGML_METAL=ON && cmake --build build --config Release -j$(sysctl -n hw.logicalcpu)
+```
 
 ### 5. 셸 함수 등록
 
 `~/.zshrc` 맨 끝에 아래 두 줄이 이미 추가되어 있습니다:
 
 ```zsh
-# 인프런 강의 전사 파이프라인 (개인 학습 노트 용도)
-source "$HOME/lecture-transcribe/bin/lecture.zsh"
+# 시스템 오디오 녹음 → 한국어 전사 파이프라인 (개인 학습·기록 용도)
+source "$HOME/sound-notes/bin/notes.zsh"
 ```
 
-새 터미널을 열면 자동으로 `lecture-start` / `lecture-stop` / `lecture-status` 명령을 쓸 수
+새 터미널을 열면 자동으로 `note-start` / `note-stop` / `note-status` 명령을 쓸 수
 있습니다.
 
 ---
@@ -122,17 +137,17 @@ source "$HOME/lecture-transcribe/bin/lecture.zsh"
 ## 사용법
 
 ```bash
-lecture-start "스프링부트-3강"     # 녹음 시작 (백그라운드, 프롬프트 즉시 복귀)
-# ... 강의 수강 ...
-lecture-status                      # (선택) 현재 녹음 중인지, 몇 분 지났는지 확인
-lecture-stop                        # 녹음 종료 → 자동으로 한국어 전사 실행
+note-start "스프링부트-3강"     # 녹음 시작 (백그라운드, 프롬프트 즉시 복귀)
+# ... 시청 ...
+note-status                      # (선택) 현재 녹음 중인지, 몇 분 지났는지 확인
+note-stop                        # 녹음 종료 → 자동으로 한국어 전사 실행
 ```
 
-`lecture-stop` 실행이 끝나면 아래 경로에 결과물이 생깁니다:
+`note-stop` 실행이 끝나면 아래 경로에 결과물이 생깁니다:
 
 ```
-~/lecture-transcribe/transcripts/스프링부트-3강/스프링부트-3강_20260813_1430.wav
-~/lecture-transcribe/transcripts/스프링부트-3강/스프링부트-3강_20260813_1430.md
+~/sound-notes/transcripts/스프링부트-3강/스프링부트-3강_20260813_1430.wav
+~/sound-notes/transcripts/스프링부트-3강/스프링부트-3강_20260813_1430.md
 ```
 
 `.md`는 아래처럼 문단별 타임스탬프(재생 기준 `MM:SS`)가 붙은 형태입니다:
@@ -149,15 +164,15 @@ lecture-stop                        # 녹음 종료 → 자동으로 한국어 �
 
 이 파일을 **그대로 LLM에 붙여넣어** 요약을 요청하면 됩니다.
 
-**동시에 하나의 녹음만** 가능합니다. 이미 녹음 중일 때 `lecture-start`를 또 실행하면 안내
-메시지와 함께 실패합니다 — 먼저 `lecture-stop`으로 끝내세요.
+**동시에 하나의 녹음만** 가능합니다. 이미 녹음 중일 때 `note-start`를 또 실행하면 안내
+메시지와 함께 실패합니다 — 먼저 `note-stop`으로 끝내세요.
 
 ---
 
 ## 트러블슈팅
 
 **"BlackHole 2ch 장치를 찾을 수 없습니다"**
-`lecture-start`가 전체 오디오 장치 목록을 출력해줍니다. 확인 순서:
+`note-start`가 전체 오디오 장치 목록을 출력해줍니다. 확인 순서:
 1. `brew install --cask blackhole-2ch` 설치됐는지 (`brew list --cask blackhole-2ch`)
 2. 설치 후 **재부팅**했는지
 3. 마이크 권한 (시스템 설정 → 개인정보 보호 및 보안 → 마이크)
@@ -176,19 +191,23 @@ Whisper 계열 모델의 흔한 실패 패턴으로, 보통 **무음/배경음�
 의심해보세요.
 
 **전사가 너무 느림**
-`bin/lecture-transcribe.sh`의 `-t 4`는 Apple M2의 P-core 4개 기준입니다. 다른 칩이면
+`bin/transcribe.sh`의 `-t 4`는 Apple M2의 P-core 4개 기준입니다. 다른 칩이면
 `sysctl -n hw.perflevel0.logicalcpu`로 P-core 개수를 확인해 값을 조정하세요. 인코딩 자체는
 Metal(GPU)이 처리하므로 스레드 수를 과하게 늘려도 별 효과가 없습니다.
 
-**`.md`의 타임스탬프가 실제 강의 진행 시간과 안 맞음**
+**`dyld: Library not loaded: @rpath/libwhisper.1.dylib`**
+`~/sound-notes` 폴더를 옮긴 뒤 `whisper.cpp`를 다시 빌드하지 않아서 생기는 오류입니다.
+위 "4. whisper.cpp 빌드 + 모델"의 재빌드 명령을 실행하세요.
+
+**`.md`의 타임스탬프가 실제 진행 시간과 안 맞음**
 배속 재생(1.25x, 1.5x 등)으로 들었다면 타임스탬프는 **"재생된(빠른) 오디오" 기준**입니다.
-원본 강의 시간으로 환산하려면 타임스탬프에 배속을 곱하세요.
+원본 시간으로 환산하려면 타임스탬프에 배속을 곱하세요.
 
 **Obsidian에서 `.wav`만 보이고 `.md`가 안 보임**
 `.md`는 Obsidian이 기본으로 지원하므로 정상적으로 보여야 합니다. 안 보인다면 vault 캐시
 문제일 수 있으니 Obsidian을 재시작하거나 사이드바를 새로고침해보세요.
 
-**강의 다 듣고 나서**
+**다 듣고 나서**
 시스템 설정 → 사운드 → 출력을 **원래 장치로 되돌리세요**(내장 스피커, DELL 모니터 등). 다중
 출력 기기를 계속 켜두면 볼륨 키가 안 먹는 등 불편할 수 있습니다.
 
@@ -198,9 +217,9 @@ Metal(GPU)이 처리하므로 스레드 수를 과하게 늘려도 별 효과가
 
 | 변수 | 기본값 | 설명 |
 |---|---|---|
-| `WHISPER_DIR` | `~/lecture-transcribe/whisper.cpp` | whisper.cpp 클론/빌드 위치 |
+| `WHISPER_DIR` | `~/sound-notes/whisper.cpp` | whisper.cpp 클론/빌드 위치 |
 | `WHISPER_MODEL` | `$WHISPER_DIR/models/ggml-large-v3-turbo-q5_0.bin` | 사용할 모델 파일 경로 |
 
 ```bash
-WHISPER_MODEL=~/lecture-transcribe/whisper.cpp/models/ggml-large-v3-turbo.bin lecture-stop
+WHISPER_MODEL=~/sound-notes/whisper.cpp/models/ggml-large-v3-turbo.bin note-stop
 ```
