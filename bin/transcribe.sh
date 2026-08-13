@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# whisper.cpp(Metal 가속)로 녹음된 WAV를 한국어로 전사해, 문단별 타임스탬프가 붙은
-# 단일 마크다운 노트(.md)로 생성한다. whisper.cpp의 SRT 출력을 중간 산출물로만 사용해
-# 파싱한 뒤 삭제하므로 최종적으로 .md 파일만 남는다 (LLM에 그대로 넣기 좋은 형태).
+# whisper.cpp(Metal 가속)로 녹음된 WAV를 한국어로 전사해 마크다운 노트 두 개를 만든다:
+# {제목}.md(문단별 "## MM:SS" 타임스탬프 포함, 특정 구간 다시 찾을 때)와
+# {제목}_plain.md(타임스탬프 없는 순수 텍스트, LLM에 그대로 붙여넣기용). whisper.cpp의
+# SRT 출력은 중간 산출물로만 쓰고 파싱한 뒤 삭제한다.
 # 개인 학습·기록 용도로만 사용 — 전사 결과물의 재배포·공유는 금지.
 #
 # 사용법: transcribe.sh <입력.wav 경로>
@@ -31,6 +32,7 @@ fi
 OUT_PREFIX="${WAV_PATH%.wav}"
 SRT_PATH="${OUT_PREFIX}.srt"
 MD_PATH="${OUT_PREFIX}.md"
+PLAIN_PATH="${OUT_PREFIX}_plain.md"
 NOTE_TITLE="$(basename "$(dirname "$WAV_PATH")")"
 
 echo "전사 시작: $(basename "$WAV_PATH")"
@@ -44,29 +46,32 @@ START_TS=$(date +%s)
   -of "$OUT_PREFIX" \
   -t 4 -pp
 
-{
-  echo "# ${NOTE_TITLE}"
-  echo ""
-  awk '
-    BEGIN { RS=""; FS="\n" }
-    {
-      split($2, t, " --> ")
-      split(t[1], hms, "[:,]")
-      total_sec = hms[1] * 3600 + hms[2] * 60 + hms[3]
-      mm = int(total_sec / 60)
-      ss = total_sec % 60
-      printf("## %02d:%02d\n", mm, ss)
-      text = ""
-      for (i = 3; i <= NF; i++) {
-        line = $i
-        gsub(/^[ \t]+|[ \t]+$/, "", line)
-        text = (text == "") ? line : text " " line
-      }
-      print text
-      print ""
+echo "# ${NOTE_TITLE}" > "$MD_PATH"
+echo "" >> "$MD_PATH"
+echo "# ${NOTE_TITLE}" > "$PLAIN_PATH"
+echo "" >> "$PLAIN_PATH"
+
+awk -v md="$MD_PATH" -v plain="$PLAIN_PATH" '
+  BEGIN { RS=""; FS="\n" }
+  {
+    split($2, t, " --> ")
+    split(t[1], hms, "[:,]")
+    total_sec = hms[1] * 3600 + hms[2] * 60 + hms[3]
+    mm = int(total_sec / 60)
+    ss = total_sec % 60
+    text = ""
+    for (i = 3; i <= NF; i++) {
+      line = $i
+      gsub(/^[ \t]+|[ \t]+$/, "", line)
+      text = (text == "") ? line : text " " line
     }
-  ' "$SRT_PATH"
-} > "$MD_PATH"
+    printf("## %02d:%02d\n", mm, ss) >> md
+    print text >> md
+    print "" >> md
+    print text >> plain
+    print "" >> plain
+  }
+' "$SRT_PATH"
 
 rm -f "$SRT_PATH"
 
@@ -75,4 +80,5 @@ ELAPSED=$((END_TS - START_TS))
 
 echo ""
 echo "전사 완료 (${ELAPSED}초 소요)"
-echo "  노트: ${MD_PATH}"
+echo "  노트(타임스탬프 포함): ${MD_PATH}"
+echo "  노트(타임스탬프 없음): ${PLAIN_PATH}"
